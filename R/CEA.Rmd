@@ -4,8 +4,9 @@ version: 1.1
 date: "September-2022"
 output: html_document
 ---
+### STEP 1: Load libraries
 ```{r setup, include=FALSE}
-# STEP #1: If you do not have a package installed, run: install.packages("packagename")
+# If you do not have a R package installed, run: install.packages("packagename")
 
 library(mice)       # required to impute data
 library(systemfit)  # required to run seemingly unrelated regression
@@ -18,7 +19,7 @@ library(tidyverse)  # required for data manipulation
 
 ```
 
-### Import dataset
+### STEP #2: Import dataset
 Running the code below you will import `dataset.xlsx` to R Studio Global Environment and store it in an object called `dataset`. 
 Make sure you replace the path written between quotes by the path you saved `dataset.xlsx` in your computer.
 Click on dataset in the Global Environment window to visualize the variables stored in this object. A detailed description of each variable is provided in **Table 1**. 
@@ -26,7 +27,7 @@ Click on dataset in the Global Environment window to visualize the variables sto
 dataset <- read_excel("data/dataset.xlsx")
 ```
 
-### Box 1.Multiple imputation procedure
+### STEP #3: Box 1.Multiple imputation procedure
 ```{r}
 
 #1 Split dataset by treatment group (Tr)
@@ -60,7 +61,7 @@ dataset <- read_excel("data/dataset.xlsx")
 ```
 
 
-### Box 2.Bootstrapping combined with adjusted seemingly unrelated regressions model
+### STEP #4: Box 2.Bootstrapping combined with adjusted seemingly unrelated regressions model
 ```{r}
 
 #9 Define a function to fit seemingly unrelated regressions model
@@ -78,7 +79,7 @@ bootce <- lapply(impdata, function(x) boot(data=x, statistic=fsur, R=5000))
 
 ```
 
-### Box 3.Extract statistics of interest obtained from combining MI procedure, bootstrapping, and adjusted seemingly unrelated regressions model
+### STEP #5: Box 3.Extract statistics of interest obtained from combining MI procedure, bootstrapping, and adjusted seemingly unrelated regressions model
 ```{r}
 
 #11 Extract statistics of interest of each imputed dataset before bootstrapping from the `bootce` list
@@ -93,7 +94,7 @@ bootce <- lapply(impdata, function(x) boot(data=x, statistic=fsur, R=5000))
 ```
 
 
-### Box 4.Pooling cost-effectiveness results using Rubin’s rules
+### STEP #6: Box 4.Pooling cost-effectiveness results using Rubin’s rules
 ```{r}
 
 #13 Pool statistics of interest of imputed datasets
@@ -131,7 +132,7 @@ bootce <- lapply(impdata, function(x) boot(data=x, statistic=fsur, R=5000))
   
 ```
 
-### Box 5.Cost-effectiveness plane
+### STEP #7: Box 5.Cost-effectiveness plane
 ```{r pressure, echo=FALSE}
 
 #20 CE-plane
@@ -151,7 +152,7 @@ bootce <- lapply(impdata, function(x) boot(data=x, statistic=fsur, R=5000))
   
 ```
 
-### Box 6.Cost-effectiveness acceptability curve
+### STEP #8: Box 6.Cost-effectiveness acceptability curve
 ```{r}
 
 #21 Incremental Net Benefit approach using Rubin’s rules
