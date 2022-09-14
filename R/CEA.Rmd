@@ -1,0 +1,175 @@
+---
+title: "Conducting trial-based economic evaluations using R: A Tutorial "
+version: 1.1
+date: "September-2022"
+output: html_document
+---
+```{r setup, include=FALSE}
+# STEP #1: If you do not have a package installed, run: install.packages("packagename")
+
+library(mice)       # required to impute data
+library(systemfit)  # required to run seemingly unrelated regression
+library(car)        # required to run seemingly unrelated regression
+library(boot)       # required to bootstrap
+library(ggplot2)    # required to plot CE-plane and CEAC
+library(ggpointdensity) # required to plot CE-plane
+library(readxl)     # required to import data in .xlsx
+library(tidyverse)  # required for data manipulation
+
+```
+
+### Import dataset
+Running the code below you will import `dataset.xlsx` to R Studio Global Environment and store it in an object called `dataset`. 
+Make sure you replace the path written between quotes by the path you saved `dataset.xlsx` in your computer.
+Click on dataset in the Global Environment window to visualize the variables stored in this object. A detailed description of each variable is provided in **Table 1**. 
+```{r}
+dataset <- read_excel("data/dataset.xlsx")
+```
+
+### Box 1.Multiple imputation procedure
+```{r}
+
+#1 Split dataset by treatment group (Tr)
+    Tr0 <- subset(dataset, Tr==0)
+    Tr1 <- subset(dataset, Tr==1)
+    
+#2 Create a predictor matrix excluding Tr as a predictor
+    predMat <- make.predictorMatrix(dataset)
+    predMat[,'Tr'] <- 0
+    
+#3 Perform MI procedure by Tr and combine them
+    imp.Tr0 <- mice(Tr0, m=5, method="pmm", predictorMatrix = predMat, seed = 1234, printFlag = FALSE)
+    imp.Tr1 <- mice(Tr1, m=5, method="pmm", predictorMatrix = predMat, seed = 1234, printFlag = FALSE)
+    
+#4 Merge and stack imputed datasets 
+    imp <- rbind(imp.Tr0, imp.Tr1)
+    impdat <- complete(imp, action = "long", include = FALSE)
+    
+#5 Extract the number of imputations to be used in Rubin's rules
+    M <- imp[["m"]]
+    
+#6 Calculate total costs after imputing follow-up data
+    impdat$Tcosts <- (impdat$Cm1 + impdat$Cm2 + impdat$Cm3 + impdat$Cm4)
+    
+#7 Calculate QALY after imputing missing follow-up data
+    impdat$QALY <- 1/2 * ((impdat$E+impdat$Em1)*1/4 +(impdat$Em1+impdat$Em2)*1/4+(impdat$Em2+impdat$Em3)*1/4+(impdat$Em3+impdat$Em4)*1/4)
+    
+#8 Store imputed datasets in a list
+    impdata <- split(impdat, f = impdat$.imp)
+    
+```
+
+
+### Box 2.Bootstrapping combined with adjusted seemingly unrelated regressions model
+```{r}
+
+#9 Define a function to fit seemingly unrelated regressions model
+  fsur <- function(x, i){
+    dataset <- x[i,]
+    r1 <- Tcosts ~ Tr + C + age + sex
+    r2 <- QALY ~ Tr + E + age + sex
+    fitsur <- systemfit(list(costreg = r1, effectreg = r2), "SUR", data=dataset)
+    betas <- fitsur$coefficients
+    return(c(betas[["costreg_Tr"]], betas[["effectreg_Tr"]]))
+  }
+
+#10 Apply boot function to each imputed dataset and store the statistics of interest in the `bootce` list
+bootce <- lapply(impdata, function(x) boot(data=x, statistic=fsur, R=5000))
+
+```
+
+### Box 3.Extract statistics of interest obtained from combining MI procedure, bootstrapping, and adjusted seemingly unrelated regressions model
+```{r}
+
+#11 Extract statistics of interest of each imputed dataset before bootstrapping from the `bootce` list
+  imputed <- lapply(bootce, function(x) ((x[["t0"]])))
+  imputed <- lapply(imputed, setNames, c("cost_diff","effect_diff"))
+  imputed <- as.matrix(reduce(imputed, bind_rows))
+ 
+#12 Extract the bootstrapped statistics of interest from the `bootce` list
+  postboot <- lapply(bootce, function(x) as.data.frame((x[["t"]])))
+  postboot <- lapply(postboot, setNames, c("bootcost_diff","booteffect_diff"))
+
+```
+
+
+### Box 4.Pooling cost-effectiveness results using Rubin’s rules
+```{r}
+
+#13 Pool statistics of interest of imputed datasets
+  pooled <- apply(imputed, 2, mean)
+  cost_diff_pooled <- pooled[["cost_diff"]]
+  effect_diff_pooled <- pooled[["effect_diff"]]
+  ICER <- cost_diff_pooled/effect_diff_pooled
+
+#14 Covariance matrix per imputed dataset
+  cov <- lapply(postboot, function(x) cov(x))
+
+#15 Within-imputation covariance
+  W <- 1/M * (cov[["1"]] + cov[["2"]] + cov[["3"]] + cov[["4"]] + cov[["5"]])
+
+#16 Between-imputation covariance
+  B <- matrix(0, ncol = 2, nrow = 2)
+  for (i in 1:M){
+  B <- B + (matrix(imputed[i,], nrow = 2) - pooled) %*% (matrix(imputed[i,], nrow = 1) - pooled)
+  }
+  B <- 1/(M - 1) * B
+  
+#17 Pooled covariance
+  cov_pooled <- (1 + 1/M) * B + W
+
+#18 Estimate lower- and upper-level limits for costs using Rubin's rules
+  Za = 1.95996  
+  LL_cost_pooled <- cost_diff_pooled - (Za*sqrt(cov_pooled[1,1])) # lower-limit of the 95% CI for costs
+  UL_cost_pooled <- cost_diff_pooled + (Za*sqrt(cov_pooled[1,1])) # upper-limit of the 95% CI for costs
+  LL_effect_pooled <- effect_diff_pooled - (Za*sqrt(cov_pooled[2,2])) # lower-limit of the 95% CI for QALY
+  UL_effect_pooled <- effect_diff_pooled + (Za*sqrt(cov_pooled[2,2])) # upper-limit of the 95% CI for QALY
+  
+#19 Loss of efficiency
+  FMI = B/(B + W)
+  LE = FMI/M
+  
+```
+
+### Box 5.Cost-effectiveness plane
+```{r pressure, echo=FALSE}
+
+#20 CE-plane
+  point <- data.frame(imputed)
+  boot <- reduce(postboot, bind_rows)
+  ggplot(data = boot, aes(x = booteffect_diff, y = bootcost_diff)) + 
+  geom_pointdensity(aes(booteffect_diff, bootcost_diff), size = 2, alpha = 0.75, show.legend = FALSE, adjust = 0.05) +
+  geom_point(data = data.frame(x = mean(point$effect_diff), y = mean(point$cost_diff)), 
+             aes(x, y), color = "red", size = 2) +
+  labs(x = "Differences in QALY") +
+  labs(y = "Differences in costs") +
+  geom_vline(xintercept = 0) +
+  geom_hline(yintercept = 0) +
+  scale_x_continuous(breaks=seq(0,1, by = 0.02)) +
+  scale_y_continuous(breaks=seq(0,4500, by = 1000)) +
+  theme_minimal()
+  
+```
+
+### Box 6.Cost-effectiveness acceptability curve
+```{r}
+
+#21 Incremental Net Benefit approach using Rubin’s rules
+  wtp <- seq(0, 80000, 1000)
+  INB <- (wtp*effect_diff_pooled) - cost_diff_pooled
+  varINB <- wtp^2*cov_pooled[2,2] + cov_pooled[1,1] - 2*wtp*cov_pooled[1,2]
+  seINB <- sqrt(varINB)
+  z <- INB/seINB
+  CEAC <- as.data.frame(wtp)
+  CEAC$prob <- pnorm(z,0,1)
+
+#22 Plot CEAC using Rubin’s rules
+  ggplot(data = CEAC, aes(x = wtp, y = prob)) +
+  geom_line(colour = "black", size = 1) +
+  ylim(0,1) +
+  labs(x = "Willingness-to-pay: incremental costs per QALY gained") +
+  labs(y = "Probability of cost-effectiveness") +
+  geom_vline(xintercept = 0) +
+  geom_hline(yintercept = 0) +
+  theme_minimal()
+```
