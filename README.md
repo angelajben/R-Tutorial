@@ -1,4 +1,4 @@
-# R-Tutorial
+# Conducting Trial-Based Economic Evaluations Using R: A Tutorial
 
 Ben, Â.J., van Dongen, J.M., El Alili, M. et al. Conducting Trial-Based Economic Evaluations Using R: A Tutorial. PharmacoEconomics (2023). https://doi.org/10.1007/s40273-023-01301-7
 
