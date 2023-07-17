@@ -1,6 +1,6 @@
 # R-Tutorial
 
-Conducting trial-based economic evaluations using R: A Tutorial
+Ben, Â.J., van Dongen, J.M., El Alili, M. et al. Conducting Trial-Based Economic Evaluations Using R: A Tutorial. PharmacoEconomics (2023). https://doi.org/10.1007/s40273-023-01301-7
 
 In this project, you will perform a cost-effectiveness analysis using `dataset.xlsx`, which is a simulated trial consisting of an intervention compared to control treatment with a 12-month follow-up period. `dataset. xlsx` includes a specific number of subjects randomized to intervention or control groups, their baseline characteristics, and outcomes measured at 4 time points (i.e., 3, 6, 9, and 12 months). Missing variables were introduced into follow-up outcome measures conditionally to age and sex, simulating a Missing At Random (MAR) mechanism.
 
